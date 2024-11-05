@@ -17,7 +17,6 @@
     },
     "set": {
       "description": "A list of permissions sets defined",
-      "default": [],
       "type": "array",
       "items": {
         "$ref": "#/definitions/PermissionSet"
@@ -132,12 +131,21 @@
         },
         "scope": {
           "description": "Allowed or denied scoped when using this permission.",
-          "default": {},
           "allOf": [
             {
               "$ref": "#/definitions/Scopes"
             }
           ]
+        },
+        "platforms": {
+          "description": "Target platforms this permission applies. By default all platforms are affected by this permission.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Target"
+          }
         }
       }
     },
@@ -240,6 +248,46 @@
           "description": "Represents a [`f64`].",
           "type": "number",
           "format": "double"
+        }
+      ]
+    },
+    "Target": {
+      "description": "Platform target.",
+      "oneOf": [
+        {
+          "description": "MacOS.",
+          "type": "string",
+          "enum": [
+            "macOS"
+          ]
+        },
+        {
+          "description": "Windows.",
+          "type": "string",
+          "enum": [
+            "windows"
+          ]
+        },
+        {
+          "description": "Linux.",
+          "type": "string",
+          "enum": [
+            "linux"
+          ]
+        },
+        {
+          "description": "Android.",
+          "type": "string",
+          "enum": [
+            "android"
+          ]
+        },
+        {
+          "description": "iOS.",
+          "type": "string",
+          "enum": [
+            "iOS"
+          ]
         }
       ]
     },
@@ -373,10 +421,24 @@
           ]
         },
         {
-          "description": "default -> serialport connector",
+          "description": "default -> # Tauri `fs` default permissions\n\nThis configuration file defines the default permissions granted\nto the filesystem.\n\n### Granted Permissions\n\nThis default permission set enables all read-related commands and\nallows access to the `$APP` folder and sub directories created in it.\nThe location of the `$APP` folder depends on the operating system,\nwhere the application is run.\n\nIn general the `$APP` folder needs to be manually created\nby the application at runtime, before accessing files or folders\nin it is possible.\n\n### Denied Permissions\n\nThis default permission set prevents access to critical components\nof the Tauri application by default.\nOn Windows the webview data folder access is denied.\n\n",
           "type": "string",
           "enum": [
             "default"
+          ]
+        },
+        {
+          "description": "read -> This enables all read related commands",
+          "type": "string",
+          "enum": [
+            "read"
+          ]
+        },
+        {
+          "description": "write -> This enables all write related commands",
+          "type": "string",
+          "enum": [
+            "write"
           ]
         }
       ]

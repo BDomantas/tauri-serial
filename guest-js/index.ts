@@ -1,17 +1,17 @@
-import { UnlistenFn } from '@tauri-apps/api/event';
+import { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Window } from '@tauri-apps/api/window';
+import { Window } from "@tauri-apps/api/window";
 
-const appWindow = new Window('serial-port');
+const appWindow = new Window("serial-port");
 
 export interface PortInfo {
-  path: "Unknown"|string;
-  manufacturer: "Unknown"|string;
-  pid: "Unknown"|string;
-  product: "Unknown"|string;
-  serial_number: "Unknown"|string;
-  type: "PCI"|string;
-  vid: "Unknown"|string;
+  path: "Unknown" | string;
+  manufacturer: "Unknown" | string;
+  pid: "Unknown" | string;
+  product: "Unknown" | string;
+  serial_number: "Unknown" | string;
+  type: "PCI" | string;
+  vid: "Unknown" | string;
 }
 
 export interface InvokeResult {
@@ -29,8 +29,8 @@ export interface SerialportOptions {
   baudRate: number;
   encoding?: string;
   dataBits?: 5 | 6 | 7 | 8;
-  flowControl?: null | 'Software' | 'Hardware';
-  parity?: null | 'Odd' | 'Even';
+  flowControl?: null | "Software" | "Hardware";
+  parity?: null | "Odd" | "Even";
   stopBits?: 1 | 2;
   timeout?: number;
   size?: number;
@@ -42,8 +42,8 @@ export interface Options {
   path?: string;
   baudRate?: number;
   dataBits: 5 | 6 | 7 | 8;
-  flowControl: null | 'Software' | 'Hardware';
-  parity: null | 'Odd' | 'Even';
+  flowControl: null | "Software" | "Hardware";
+  parity: null | "Odd" | "Even";
   stopBits: 1 | 2;
   timeout: number;
   [key: string]: any;
@@ -54,16 +54,16 @@ export interface ReadOptions {
   size?: number;
 }
 
-let tester_ports: {[key: string]: SerialPort} = {}
-let tester_listeners: {[key: string]: (...args: any[]) => void} = {}
+let tester_ports: { [key: string]: SerialPort } = {};
+let tester_listeners: { [key: string]: (...args: any[]) => void } = {};
 
 setInterval(() => {
-  console.log('check test listeners')
+  console.log("check test listeners");
   for (let path in tester_listeners) {
-    console.log('send test to ' + path)
-    tester_listeners[path]('random')
+    console.log("send test to " + path);
+    tester_listeners[path]("random");
   }
-}, 1000)
+}, 1000);
 
 class SerialPort {
   isOpen: boolean;
@@ -75,7 +75,7 @@ class SerialPort {
 
   constructor(options: SerialportOptions) {
     this.isOpen = false;
-    this.encoding = options.encoding || 'utf-8';
+    this.encoding = options.encoding || "utf-8";
     this.options = {
       path: options.path,
       baudRate: options.baudRate,
@@ -95,7 +95,9 @@ class SerialPort {
    */
   static async available_ports(): Promise<{ [key: string]: PortInfo }> {
     try {
-      const result = await invoke<{ [key: string]: PortInfo }>('plugin:serialport|available_ports');
+      const result = await invoke<{ [key: string]: PortInfo }>(
+        "plugin:serialplugin|available_ports"
+      );
       for (const path in tester_ports) {
         result[path] = {
           manufacturer: "tester",
@@ -104,9 +106,9 @@ class SerialPort {
           serial_number: "tester",
           type: "USB",
           vid: "tester",
-        } as PortInfo
+        } as PortInfo;
       }
-      return Promise.resolve(result)
+      return Promise.resolve(result);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -118,11 +120,11 @@ class SerialPort {
    * @return {Promise<void>}
    */
   static async forceClose(path: string): Promise<void> {
-    if(tester_ports[path]) {
-      delete tester_ports[path]
+    if (tester_ports[path]) {
+      delete tester_ports[path];
       return Promise.resolve();
     }
-    return await invoke<void>('plugin:serialport|force_close', {
+    return await invoke<void>("plugin:serialplugin|force_close", {
       path,
     });
   }
@@ -133,23 +135,26 @@ class SerialPort {
    */
   static async closeAll(): Promise<void> {
     tester_ports = {};
-    return await invoke<void>('plugin:serialport|close_all');
+    return await invoke<void>("plugin:serialplugin|close_all");
   }
 
   /**
    * @description: Cancel serial port monitoring
    * @return {Promise<void>}
    */
-  async cancelListen(): Promise<void> {
-    try {
-      if (this.unListen) {
-        this.unListen();
+  cancelListen(): Promise<void> {
+    if (this.unListen) {
+      try {
+        console.log("unListen event");
+        const result = this.unListen(); // Call the unListen function
         this.unListen = undefined;
+        return Promise.resolve(result);
+      } catch (error) {
+        this.unListen = undefined;
+        return Promise.reject(error);
       }
-      return;
-    } catch (error) {
-      return Promise.reject('Failed to cancel serial monitoring: ' + error);
     }
+    return Promise.resolve();
   }
 
   /**
@@ -162,7 +167,7 @@ class SerialPort {
       return Promise.resolve();
     }
     try {
-      return await invoke<void>('plugin:serialport|cancel_read', {
+      return await invoke<void>("plugin:serialplugin|cancel_read", {
         path: this.options.path,
       });
     } catch (error) {
@@ -209,7 +214,7 @@ class SerialPort {
       await this.cancelRead();
       let res = undefined;
       if (!this.is_test) {
-        res = await invoke<void>('plugin:serialport|close', {
+        res = await invoke<void>("plugin:serialplugin|close", {
           path: this.options.path,
         });
       }
@@ -223,20 +228,20 @@ class SerialPort {
   }
 
   async disconnected(fn: (...args: any[]) => void): Promise<void> {
-    let sub_path = this.options.path?.toString().replace(/\.+/, '')
+    let sub_path = this.options.path?.toString().replace(/\.+/, "");
     let checkEvent = `plugin-serialport-disconnected-${sub_path}`;
-    console.log('listen event: ' + checkEvent)
+    console.log("listen event: " + checkEvent);
     let unListen: any = await appWindow.listen<ReadDataResult>(
-        checkEvent,
-        () => {
-          try {
-            fn();
-            unListen();
-            unListen = undefined;
-          } catch (error) {
-            console.error(error);
-          }
-        },
+      checkEvent,
+      () => {
+        try {
+          fn();
+          unListen();
+          unListen = undefined;
+        } catch (error) {
+          console.error(error);
+        }
+      }
     );
   }
 
@@ -246,41 +251,38 @@ class SerialPort {
    * @param isDecode
    * @return {Promise<void>}
    */
-  async listen(fn: (...args: any[]) => void, isDecode = true): Promise<void> {
+  async listen(
+    fn: (...args: any[]) => void,
+    isDecode = true
+  ): Promise<UnlistenFn> {
     try {
       await this.cancelListen();
-      let sub_path = this.options.path?.toString().replace(/\.+/, '')
+      let sub_path = this.options.path?.toString().replace(/\.+/, "");
       let readEvent = `plugin-serialport-read-${sub_path}`;
-      console.log('listen event: ' + readEvent)
+      console.log("listen event: " + readEvent);
 
-      if (this.is_test) {
-        console.log('add test event: ' + this.options.path, fn)
-        tester_listeners[this.options.path!] = fn;
-        this.unListen = () => {
-          delete tester_listeners[this.options.path!]
-        }
-        return Promise.resolve();
-      }
-
-      this.unListen = await appWindow.listen<ReadDataResult>(
-          readEvent,
-          ({ payload }) => {
-            try {
-              if (isDecode) {
-                const decoder = new TextDecoder(this.encoding);
-                const data = decoder.decode(new Uint8Array(payload.data));
-                fn(data);
-              } else {
-                fn(new Uint8Array(payload.data));
-              }
-            } catch (error) {
-              console.error(error);
+      const unListen = await appWindow.listen<ReadDataResult>(
+        readEvent,
+        ({ payload }) => {
+          try {
+            if (isDecode) {
+              const decoder = new TextDecoder(this.encoding);
+              const data = decoder.decode(new Uint8Array(payload.data));
+              fn(data);
+            } else {
+              fn(new Uint8Array(payload.data));
             }
-          },
+          } catch (error) {
+            console.error(error);
+          }
+        }
       );
-      return;
+
+      this.unListen = unListen; // Assign the unListen function to the class property
+
+      return Promise.resolve(unListen); // Return the unListen function as a promise
     } catch (error) {
-      return Promise.reject('Failed to monitor serial port data: ' + error);
+      return Promise.reject("Failed to monitor serial port data: " + error);
     }
   }
 
@@ -301,9 +303,9 @@ class SerialPort {
       }
       let res = undefined;
       if (this.is_test) {
-        tester_ports[this.options.path] = this
+        tester_ports[this.options.path] = this;
       } else {
-        res = await invoke<void>('plugin:serialport|open', {
+        res = await invoke<void>("plugin:serialplugin|open", {
           path: this.options.path,
           baudRate: this.options.baudRate,
           dataBits: this.options.dataBits,
@@ -318,7 +320,7 @@ class SerialPort {
 
       this.disconnected(() => {
         this.isOpen = false;
-      }).catch(err => console.error(err))
+      }).catch((err) => console.error(err));
       return Promise.resolve(res);
     } catch (error) {
       return Promise.reject(error);
@@ -333,11 +335,12 @@ class SerialPort {
   async read(options?: ReadOptions): Promise<void> {
     try {
       if (this.is_test) {
-        const resp = ''; // todo add reps
-        if(tester_listeners[this.options.path!]) tester_listeners[this.options.path!](resp)
+        const resp = ""; // todo add reps
+        if (tester_listeners[this.options.path!])
+          tester_listeners[this.options.path!](resp);
         return Promise.resolve();
       }
-      return await invoke<void>('plugin:serialport|read', {
+      return await invoke<void>("plugin:serialplugin|read", {
         path: this.options.path,
         timeout: options?.timeout || this.options.timeout,
         size: options?.size || this.size,
@@ -406,7 +409,7 @@ class SerialPort {
         return Promise.resolve(2); // todo add resp
       }
 
-      return await invoke<number>('plugin:serialport|write', {
+      return await invoke<number>("plugin:serialplugin|write", {
         value,
         path: this.options.path,
       });
@@ -429,13 +432,13 @@ class SerialPort {
         if (this.is_test) {
           return Promise.resolve(2); // todo add resp
         }
-        return await invoke<number>('plugin:serialport|write_binary', {
+        return await invoke<number>("plugin:serialplugin|write_binary", {
           value: Array.from(value),
           path: this.options.path,
         });
       } else {
         return Promise.reject(
-            'value Argument type error! Expected type: string, Uint8Array, number[]',
+          "value Argument type error! Expected type: string, Uint8Array, number[]"
         );
       }
     } catch (error) {
@@ -443,6 +446,5 @@ class SerialPort {
     }
   }
 }
-
 
 export { SerialPort };

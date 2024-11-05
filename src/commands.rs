@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::state::{ReadData, SerialportInfo, SerialportState};
 use serialport::{DataBits, FlowControl, Parity, SerialPortType, StopBits};
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
@@ -230,6 +231,7 @@ pub fn close_all<R: Runtime>(
                     }
                 }
             }
+            print!("Serial ports closed");
             map.clear();
             Ok(())
         }
@@ -338,60 +340,59 @@ pub fn read<R: Runtime>(
                 Ok(mut serial) => {
                     let event_path = path.replace(".", "");
                     let read_event = format!("plugin-serialport-read-{}", &event_path);
+                    println!("event: {}", &read_event);
                     let (tx, rx): (Sender<usize>, Receiver<usize>) = mpsc::channel();
                     serialport_info.sender = Some(tx);
-                    thread::spawn(move || loop {
-                        match rx.try_recv() {
-                            Ok(_) => {
-                                println!("Serial port {} stopped reading data!", &path);
-                                break;
-                            }
-                            Err(error) => match error {
-                                TryRecvError::Disconnected => {
-                                    println!("Serial port {} disconnected!", &path);
-                                    match window.emit(
-                                        &disconnected_event,
-                                        format!("Serial port {} disconnected!", &path),
-                                    ) {
-                                        Ok(_) => {}
-                                        Err(error) => {
-                                            println!(
-                                                "Failed to send disconnection event: {}",
-                                                error
-                                            )
-                                        }
-                                    }
+                    thread::spawn(move || {
+                        let mut message_buf = String::new(); // Buffer to store the message
+                        loop {
+                            // Check if a signal has been received to stop reading
+                            match rx.try_recv() {
+                                Ok(_) | Err(TryRecvError::Disconnected) => {
+                                    // If a signal is received or the channel is disconnected, break the loop and exit
+                                    println!("Received stop signal for serial port {}", &path);
                                     break;
                                 }
-                                TryRecvError::Empty => {}
-                            },
-                        }
-                        let mut serial_buf: Vec<u8> = vec![0; size.unwrap_or(1024)];
-                        match serial.read(serial_buf.as_mut_slice()) {
-                            Ok(size) => {
-                                println!("Serial port {} read data size: {}", &path, size);
-                                match window.emit(
-                                    &read_event,
-                                    ReadData {
-                                        data: &serial_buf[..size],
-                                        size,
-                                    },
-                                ) {
-                                    Ok(_) => {}
-                                    Err(error) => {
-                                        println!("Failed to send data: {}", error)
+                                _ => {} // Continue reading data if no signal received
+                            }
+                            let mut buf = [0; 1]; // Buffer to read a single byte
+                            match serial.read_exact(&mut buf) {
+                                Ok(_) => {
+                                    // Convert the byte to a character
+                                    let character = buf[0] as char;
+                                    // Append the character to the message buffer
+                                    message_buf.push(character);
+                                    
+                                    // Check if a newline character is encountered, indicating the end of a message
+                                    if character == '\n' {
+                                        // Emit the complete message to the frontend
+                                        match window.emit(&read_event, ReadData {
+                                            data: message_buf.as_bytes(),
+                                            size: message_buf.len(),
+                                        }) {
+                                            Ok(_) => {}
+                                            Err(error) => {
+                                                println!("Failed to send data: {}", error)
+                                            }
+                                        }
+                                        
+                                        // Clear the message buffer to prepare for the next message
+                                        message_buf.clear();
                                     }
                                 }
-                            }
-                            Err(_err) => {
-                                // println!("读取数据失败! {:?}", err);
+                                Err(ref err) if err.kind() == ErrorKind::TimedOut => {
+                                    // Timed out, continue waiting for data
+                                    continue;
+                                }
+                                Err(err) => {
+                                    println!("Failed to read from serial port: {:?}", err);
+                                    break; // Break out of the loop for other errors
+                                }
                             }
                         }
-                        thread::sleep(Duration::from_millis(timeout.unwrap_or(200)));
                     });
                 }
                 Err(error) => {
-
                     match window.emit(
                         &disconnected_event,
                         format!("Serial port {} disconnected!", &path),
@@ -423,6 +424,8 @@ pub fn write<R: Runtime>(
 ) -> Result<usize, Error> {
     let event_path = path.replace(".", "");
     let disconnected_event = format!("plugin-serialport-disconnected-{}", &event_path);
+    // Print the string that will be written to the serial port
+    println!("Writing to serial port {}: {}", path, value);
     get_serialport(state, path.clone(), |serialport_info| match serialport_info
         .serialport
         .write(value.as_bytes())

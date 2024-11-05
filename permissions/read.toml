@@ -1,0 +1,14 @@
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "read"
+description = "This enables all read related commands"
+commands.allow = [
+    "available_ports",
+    "read",
+    "open",
+    "close",
+    "close_all",
+    "force_close",
+    "cancel_read"
+]
